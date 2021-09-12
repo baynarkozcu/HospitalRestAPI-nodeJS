@@ -1,62 +1,79 @@
 const router = require('express').Router();
-const User = require('../models/userModel')
+const User = require('../models/userModel');
+const httpErrors = require('http-errors');
+const bcrypt = require('bcrypt');
 
-router.get('/', async (req, res)=>{
+router.get('/', async (req, res, next) => {
     const allUser = await User.find({});
     res.json(allUser);
-    try{
+    try {
 
-    }catch(error){
-        console.log(`userRouter Get All User Method Errors : ${error}`); 
+    } catch (error) {
+        next(httpErrors(404, error));
     }
 });
 
-router.get('/:id', async (req, res)=>{
-    try{
-        const user = await User.findById({_id:req.params.id});
+router.get('/:id', async (req, res, next) => {
+    try {
+        const user = await User.findById({ _id: req.params.id });
         res.json(user);
-    }catch(error){
-        console.log(`userRouter Get Single User Method Errors : ${error}`); 
+    } catch (error) {
+        next(httpErrors(404, error));
     }
 });
 
-router.post('/', async (req, res)=>{
-    try{
+router.post('/', async (req, res, next) => {
+    try {
         const user = new User(req.body);
-        const result = await user.save();
-        res.json(result);
-    }catch(error){
-        console.log(`userRouter Post Create User Method Errors : ${error}`);
+        user.password = await bcrypt.hash(user.password, 10);
+        const {error, result} = user.joiValidation();
+        if(error){
+            next(httpErrors(400, error));
+        }else{
+            const result = await user.save();
+            res.json(result);
+        }
+    } catch (error) {
+        next(httpErrors(404, error));
     }
 });
 
-router.patch('/:id', async (req, res)=>{
-    try{
-        const user = await User.findByIdAndUpdate({_id:req.params.id}, req.body, {new: true, runValidators: true });
-        if(user){
-            return res.json(user);
-        }else{
-            return res.status(400).json({
-                "message": "Wrong!!"
-            });
+router.patch('/:id', async (req, res, next) => {
+
+    delete req.body.createdAt;
+    delete req.body.updatedAt;
+
+    if(req.body.hasOwnProperty('password')){
+        req.body.password = await bcrypt.hash(req.body.password, 10);
+    }
+    const user = new User(req.body);
+    const {error, result} = user.joiValidationForUpdate();
+    if(error){
+        next(httpErrors(400, error));
+    }else{
+        try {
+            const user = await User.findByIdAndUpdate({ _id: req.params.id }, req.body, { new: true, runValidators: true });
+            if (user) {
+                return res.json(user);
+            } else {
+                throw httpErrors(404, 'User not found');
+            }
+        } catch (error) {
+            next(httpErrors(404, error));
         }
-    }catch(error){
-        console.log(`userRouter Update Single User Method Errors : ${error}`); 
     }
 });
 
-router.delete('/:id',  async(req, res)=>{
-    try{
-        const user = await User.findByIdAndDelete({_id:req.params.id});
-        if(user){
+router.delete('/:id', async (req, res, next) => {
+    try {
+        const user = await User.findByIdAndDelete({ _id: req.params.id });
+        if (user) {
             return res.json(user);
-        }else{
-            return res.status(400).json({
-                "message": "User Not Found!!"
-            });
+        } else {
+            throw httpErrors(404, 'User not found');
         }
-    }catch(error){
-        console.log(`userRouter Delete Single User Method Errors : ${error}`); 
+    } catch (error) {
+        next(httpErrors(404, error));
     }
 });
 
