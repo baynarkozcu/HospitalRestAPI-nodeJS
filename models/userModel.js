@@ -2,7 +2,11 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const Joi = require('@hapi/joi');
 
-const schema = new Schema({
+const httpErrors = require('http-errors');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+
+const UserSchema = new Schema({
     name: {
         type: String,
         required: true,
@@ -50,23 +54,51 @@ const joiSchema = Joi.object({
     name:Joi.string().min(3).max(35).trim(),
     age:Joi.number().min(10).max(100),
     gender:Joi.string(),
-    mail:Joi.string().trim().email(),
+    mail:Joi.string().email().required(),
     password:Joi.string().min(8).trim(),
     department:Joi.string().trim(),
     position:Joi.string().min(3).max(35).trim(),
 });
 
 
-schema.methods.joiValidation = (user)=>{
+UserSchema.methods.joiValidation = (user)=>{
     joiSchema.required();
     return joiSchema.validate(user);
 }
 
-schema.methods.joiValidationForUpdate = (user)=>{
+UserSchema.methods.joiValidationForUpdate = (user)=>{
     return joiSchema.validate(user);
 }
 
+UserSchema.methods.generateToken = async function(){
+    const user = this;
+    const token = await jwt.sign({
+        _id: user._id,
+        mail: user.mail,
+    }, "secretkey", {expiresIn: "1h"});
 
-const User = mongoose.model('User', schema);
+    return token;
+}
+
+UserSchema.statics.login = async(mail, password)=>{
+
+    const user = await User.findOne({mail});
+
+    if(!user){
+        return httpErrors(404, "Email Not Found");
+    }
+
+    const checkPass = await bcrypt.compare(password, user.password);
+
+    if(!checkPass){
+        return httpErrors(400, "Mail / Password Not Correct");
+    }
+
+    return user;
+
+}
+
+
+const User = mongoose.model('User', UserSchema);
 
 module.exports = User;
